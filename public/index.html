@@ -1,0 +1,1325 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>COMEX Track | Control Logístico de Exportaciones</title>
+    <!-- Estilos y librerías servidos desde el propio sitio (sin CDN) -->
+    <link rel="stylesheet" href="/tailwind.css">
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/vendor/lucide.min.js"></script>
+    <script src="/vendor/chart.umd.min.js"></script>
+    <script src="/vendor/supabase.min.js"></script>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen flex flex-col">
+    <!-- Pantalla de inicio de sesión (Supabase Auth) -->
+    <div id="loginOverlay" class="fixed inset-0 z-[60] bg-slate-50 flex items-center justify-center p-4">
+        <form id="loginForm" class="w-full max-w-sm bg-white border border-slate-200 rounded-2xl shadow-sm p-6">
+            <div class="flex items-center gap-3 mb-5">
+                <div class="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+                    <i data-lucide="lock" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <span class="font-extrabold text-lg tracking-tight text-slate-900">COMEX<span class="text-blue-600">Track</span></span>
+                    <span class="ml-1 text-[10px] font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full uppercase tracking-wider">Exportaciones</span>
+                </div>
+            </div>
+            <label for="loginEmail" class="block text-xs font-semibold text-slate-600 mb-1">Correo</label>
+            <input id="loginEmail" type="email" autocomplete="username" required placeholder="nombre@firplak.com" class="w-full px-3 py-2 mb-3 text-sm border border-slate-200 rounded-xl bg-slate-50/50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white">
+            <label for="loginPwd" class="block text-xs font-semibold text-slate-600 mb-1">Contraseña</label>
+            <input id="loginPwd" type="password" autocomplete="current-password" required placeholder="Tu contraseña" class="w-full px-3 py-2 mb-3 text-sm border border-slate-200 rounded-xl bg-slate-50/50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white">
+            <p id="loginMsg" class="hidden text-xs font-semibold text-rose-600 mb-3"></p>
+            <button type="submit" id="loginBtn" class="w-full px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold">Entrar</button>
+            <p class="text-[11px] text-slate-400 mt-4">Acceso solo para el equipo de Comercio Exterior de Firplak.</p>
+        </form>
+    </div>
+
+
+    <!-- BARRA SUPERIOR / HEADER -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <!-- Logotipo y Nombre -->
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+                        <i data-lucide="ship" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="font-extrabold text-lg tracking-tight text-slate-900">COMEX<span class="text-blue-600">Track</span></span>
+                            <span class="text-[10px] font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full uppercase tracking-wider">v2.0</span>
+                        </div>
+                        <p class="text-xs text-slate-500 hidden sm:block">Control y Trazabilidad Operacional de Exportaciones</p>
+                    </div>
+                </div>
+
+                <!-- Resumen Rápido de KPIs Globales -->
+                <div class="hidden md:flex items-center gap-4 text-xs">
+                    <div class="flex items-center gap-1.5 px-3 py-1 bg-slate-100 text-slate-700 rounded-lg font-medium">
+                        <span class="text-slate-400">Total:</span>
+                        <span id="statTotalOps" class="font-bold">0</span>
+                    </div>
+                    <div class="flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg font-semibold">
+                        <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+                        <span>Activas:</span>
+                        <span id="statActivas" class="font-bold">0</span>
+                    </div>
+                    <div class="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg font-semibold">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                        <span>Cerradas:</span>
+                        <span id="statCerradas" class="font-bold">0</span>
+                    </div>
+                    <div id="statEstancadasBadge" class="flex items-center gap-1.5 px-3 py-1 bg-rose-50 text-rose-700 border border-rose-200 rounded-lg font-bold">
+                        <i data-lucide="alert-circle" class="w-3.5 h-3.5"></i>
+                        <span>Estancadas:</span>
+                        <span id="statEstancadas">0</span>
+                    </div>
+                </div>
+
+                <!-- Selector de Responsable Activo (Login Simple) -->
+                <div class="flex items-center gap-3">
+                    <div id="userBox" class="hidden items-center gap-2 text-xs">
+                        <span class="hidden sm:flex items-center gap-1 text-slate-600 font-medium"><i data-lucide="user" class="w-3.5 h-3.5"></i><span id="userEmail"></span></span>
+                        <button id="btnLogout" type="button" class="flex items-center gap-1 whitespace-nowrap px-2.5 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 font-semibold"><i data-lucide="log-out" class="w-3.5 h-3.5"></i>Cerrar sesión</button>
+                    </div>
+                    <div class="flex items-center gap-2 bg-slate-100 border border-slate-200 rounded-xl px-3 py-1.5 text-xs">
+                        <i data-lucide="user-check" class="w-4 h-4 text-blue-600"></i>
+                        <span class="text-slate-500 hidden sm:inline">Usuario:</span>
+                        <select id="globalUserSelector" class="bg-transparent font-bold text-slate-800 focus:outline-none cursor-pointer">
+                            <option value="Catalina">Catalina</option>
+                            <option value="Laura">Laura</option>
+                            <option value="John">John</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pestañas de Navegación -->
+            <div class="flex space-x-2 py-2 border-t border-slate-100 overflow-x-auto">
+                <button data-tab-target="operations" class="flex items-center gap-2 px-4 py-2 font-medium text-sm rounded-lg bg-blue-600 text-white shadow-sm transition">
+                    <i data-lucide="list-filter" class="w-4 h-4"></i>
+                    <span>Operaciones</span>
+                </button>
+                <button data-tab-target="new_operation" class="flex items-center gap-2 px-4 py-2 font-medium text-sm rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition">
+                    <i data-lucide="plus-circle" class="w-4 h-4"></i>
+                    <span>Nueva Operación</span>
+                </button>
+                <button data-tab-target="detail" id="navDetailBtn" class="flex items-center gap-2 px-4 py-2 font-medium text-sm rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition">
+                    <i data-lucide="git-commit" class="w-4 h-4"></i>
+                    <span>Detalle & Stepper</span>
+                </button>
+                <button data-tab-target="dashboard" class="flex items-center gap-2 px-4 py-2 font-medium text-sm rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition">
+                    <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
+                    <span>Dashboard Logístico</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- BANNER DE AVISO: Esquema pendiente en Supabase -->
+    <div id="schemaMissingBanner" class="hidden bg-amber-500 text-white px-4 py-3 shadow-md">
+        <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs sm:text-sm">
+            <div class="flex items-center gap-2">
+                <i data-lucide="alert-triangle" class="w-5 h-5 flex-shrink-0"></i>
+                <span><strong>Atención:</strong> Las tablas aún no están creadas en Supabase. Abre el <a href="https://supabase.com/dashboard/project/ahcrtxmlotzagtwwyvny/sql" target="_blank" class="underline font-bold">SQL Editor de Supabase</a> y ejecuta el archivo <code>schema.sql</code>.</span>
+            </div>
+            <button onclick="checkDatabaseAndLoad()" class="px-3 py-1 bg-white text-amber-800 rounded font-bold hover:bg-amber-50 transition shadow-sm">
+                Reintentar Conexión
+            </button>
+        </div>
+    </div>
+
+    <!-- CONTENEDOR PRINCIPAL -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full">
+
+        <!-- ================================================================== -->
+        <!-- PESTAÑA 1: LISTA DE OPERACIONES -->
+        <!-- ================================================================== -->
+        <section id="tab-operations" class="tab-panel tab-content space-y-5">
+            <!-- Barra de Filtros -->
+            <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm space-y-3">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                    <!-- Búsqueda en vivo -->
+                    <div class="relative lg:col-span-2">
+                        <i data-lucide="search" class="w-4 h-4 absolute left-3 top-3 text-slate-400"></i>
+                        <input type="text" id="filterSearch" oninput="handleFilterChange()" placeholder="Buscar por FP, Cliente, Contenedor, Pedido SAP..." class="w-full pl-9 pr-4 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-slate-50/50">
+                    </div>
+
+                    <!-- Filtro Etapa -->
+                    <div>
+                        <select id="filterEtapa" onchange="handleFilterChange()" class="w-full py-2 px-3 text-xs sm:text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-slate-50/50">
+                            <option value="">Todas las Etapas</option>
+                        </select>
+                    </div>
+
+                    <!-- Filtro Responsable -->
+                    <div>
+                        <select id="filterResponsable" onchange="handleFilterChange()" class="w-full py-2 px-3 text-xs sm:text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-slate-50/50">
+                            <option value="">Todos los Responsables</option>
+                        </select>
+                    </div>
+
+                    <!-- Filtro Modalidad -->
+                    <div>
+                        <select id="filterModalidad" onchange="handleFilterChange()" class="w-full py-2 px-3 text-xs sm:text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-slate-50/50">
+                            <option value="">Todas las Modalidades</option>
+                            <option value="FCL">FCL (Contenedor Completo)</option>
+                            <option value="LCL">LCL (Carga Suelta)</option>
+                            <option value="aéreo">Aéreo</option>
+                            <option value="courier">Courier</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Filtros rápidos por Estado -->
+                <div class="flex flex-wrap items-center justify-between pt-2 border-t border-slate-100 text-xs gap-3">
+                    <div class="flex items-center gap-3 flex-wrap">
+                        <!-- Filtro Solo activas (Activado por defecto) -->
+                        <label class="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-xl font-bold text-blue-800 cursor-pointer hover:bg-blue-100 transition shadow-xs">
+                            <input type="checkbox" id="filterSoloActivas" checked onchange="handleSoloActivasChange(this.checked)" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer">
+                            <span>Solo activas</span>
+                        </label>
+
+                        <div class="flex items-center gap-1.5">
+                            <span class="text-slate-500 font-medium">Estado específico:</span>
+                            <select id="filterEstado" onchange="handleFilterChange()" class="bg-white px-2.5 py-1 border border-slate-200 rounded-lg font-semibold text-slate-700 focus:outline-none cursor-pointer">
+                                <option value="activa" selected>Activas</option>
+                                <option value="cerrada">Cerradas</option>
+                                <option value="bloqueada">Bloqueadas</option>
+                                <option value="">Todos los Estados</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <button onclick="loadOperations()" class="flex items-center gap-1.5 text-blue-600 hover:text-blue-800 font-medium transition">
+                        <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Actualizar
+                    </button>
+                </div>
+            </div>
+
+            <!-- Tabla de Operaciones -->
+            <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs sm:text-sm">
+                        <thead class="bg-slate-50/80 text-slate-500 uppercase text-[11px] font-bold tracking-wider border-b border-slate-200">
+                            <tr>
+                                <th class="px-4 py-3.5">FP / Consecutivo</th>
+                                <th class="px-4 py-3.5">Cliente & Destino</th>
+                                <th class="px-4 py-3.5">Modalidad & Incoterm</th>
+                                <th class="px-4 py-3.5">Contenedor / Guía</th>
+                                <th class="px-4 py-3.5">Etapa Actual</th>
+                                <th class="px-4 py-3.5">Facturación</th>
+                                <th class="px-4 py-3.5">Inactividad</th>
+                                <th class="px-4 py-3.5">Pedidos SAP</th>
+                                <th class="px-4 py-3.5 text-right">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="operationsTableBody" class="divide-y divide-slate-100">
+                            <!-- Filas dinámicas -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================================================================== -->
+        <!-- PESTAÑA 2: NUEVA OPERACIÓN -->
+        <!-- ================================================================== -->
+        <section id="tab-new_operation" class="tab-panel tab-content hidden max-w-4xl mx-auto space-y-6">
+            <div class="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm">
+                <div class="flex items-center justify-between pb-5 border-b border-slate-100 mb-6">
+                    <div>
+                        <h2 class="text-xl font-extrabold text-slate-900">Registrar Nueva Operación de Exportación</h2>
+                        <p class="text-xs text-slate-500">Crea el registro de control maestro con modulación inicial</p>
+                    </div>
+                    <span class="px-3 py-1 bg-blue-50 text-blue-700 rounded-lg text-xs font-bold border border-blue-200">
+                        Etapa 1 Auto-Registrada
+                    </span>
+                </div>
+
+                <form id="formNewOperation" onsubmit="handleCreateOperation(event)" class="space-y-6">
+                    
+                    <!-- TOGGLE "¿TIENE FP?" -->
+                    <div class="p-4 bg-slate-50 rounded-xl border border-slate-200/80 flex items-center justify-between">
+                        <div>
+                            <span class="text-sm font-bold text-slate-900 block">¿Cuenta con FP (Proforma Oficial)?</span>
+                            <span id="labelTieneFp" class="text-xs text-slate-500">Sí, cuenta con consecutivo FP oficial</span>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="newOpTieneFp" checked onchange="toggleTieneFp(this)" class="sr-only peer">
+                            <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        </label>
+                    </div>
+
+                    <!-- BLOQUE DE COTIZACIÓN SIN FP (Condicional) -->
+                    <div id="blockCotizacionSinFp" class="hidden p-5 bg-amber-50/70 border border-amber-200 rounded-xl space-y-4">
+                        <div class="flex items-center gap-2 text-amber-800 font-bold text-sm">
+                            <i data-lucide="file-question" class="w-4 h-4"></i>
+                            <span>Registro de Cotización Enviada al Equipo MAC</span>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Enlace o Archivo de Cotización MAC *</label>
+                                <input type="text" id="cotLink" placeholder="https://sharepoint.com/... o Cotizacion_123.pdf" class="w-full px-3 py-2 text-xs sm:text-sm border border-amber-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none bg-white">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Fecha de Envío a MAC *</label>
+                                <input type="date" id="cotFechaMac" class="w-full px-3 py-2 text-xs sm:text-sm border border-amber-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none bg-white">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Motivo de Excepción *</label>
+                                <select id="cotMotivo" class="w-full px-3 py-2 text-xs sm:text-sm border border-amber-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none bg-white">
+                                    <option value="muestra">Envío de Muestra</option>
+                                    <option value="urgencia">Urgencia Operacional</option>
+                                    <option value="reposición">Reposición</option>
+                                    <option value="otro">Otro</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Observaciones MAC</label>
+                                <input type="text" id="cotObservaciones" placeholder="Detalle adicional..." class="w-full px-3 py-2 text-xs sm:text-sm border border-amber-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none bg-white">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CAMPOS PRINCIPALES DE LA OPERACIÓN -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                        <!-- Consecutivo FP -->
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">Consecutivo FP / Referencia *</label>
+                            <input type="text" id="newOpFp" required placeholder="Ej: FP-2026-001" class="w-full px-3 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none font-semibold">
+                        </div>
+
+                        <!-- Cliente -->
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">Cliente *</label>
+                            <select id="newOpCliente" required class="w-full px-3 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+                                <option value="">Cargando clientes...</option>
+                            </select>
+                        </div>
+
+                        <!-- País Destino -->
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">País de Destino *</label>
+                            <input type="text" id="newOpPaisDestino" required placeholder="Ej: México, Chile, Ecuador" class="w-full px-3 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        </div>
+
+                        <!-- Incoterm -->
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">Incoterm *</label>
+                            <select id="newOpIncoterm" required class="w-full px-3 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+                                <option value="FOB">FOB (Free on Board)</option>
+                                <option value="CIF">CIF (Cost, Insurance & Freight)</option>
+                                <option value="CFR">CFR (Cost & Freight)</option>
+                                <option value="EXW">EXW (Ex Works)</option>
+                                <option value="FCA">FCA (Free Carrier)</option>
+                                <option value="DAP">DAP (Delivered at Place)</option>
+                                <option value="DDP">DDP (Delivered Duty Paid)</option>
+                                <option value="CIP">CIP (Carriage & Insurance Paid)</option>
+                            </select>
+                        </div>
+
+                        <!-- Modalidad (Píldoras) -->
+                        <div class="sm:col-span-2">
+                            <label class="block text-xs font-semibold text-slate-700 mb-2">Modalidad de Transporte *</label>
+                            <div class="grid grid-cols-4 gap-2">
+                                <label class="flex items-center justify-center gap-1.5 p-2 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50 transition text-xs font-medium has-[:checked]:bg-blue-50 has-[:checked]:border-blue-500 has-[:checked]:text-blue-700">
+                                    <input type="radio" name="modalidad" value="FCL" checked class="hidden">
+                                    <span>FCL</span>
+                                </label>
+                                <label class="flex items-center justify-center gap-1.5 p-2 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50 transition text-xs font-medium has-[:checked]:bg-blue-50 has-[:checked]:border-blue-500 has-[:checked]:text-blue-700">
+                                    <input type="radio" name="modalidad" value="LCL" class="hidden">
+                                    <span>LCL</span>
+                                </label>
+                                <label class="flex items-center justify-center gap-1.5 p-2 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50 transition text-xs font-medium has-[:checked]:bg-blue-50 has-[:checked]:border-blue-500 has-[:checked]:text-blue-700">
+                                    <input type="radio" name="modalidad" value="aéreo" class="hidden">
+                                    <span>Aéreo</span>
+                                </label>
+                                <label class="flex items-center justify-center gap-1.5 p-2 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50 transition text-xs font-medium has-[:checked]:bg-blue-50 has-[:checked]:border-blue-500 has-[:checked]:text-blue-700">
+                                    <input type="radio" name="modalidad" value="courier" class="hidden">
+                                    <span>Courier</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Contenedor / Guía -->
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">Contenedor / Guía / Tracking</label>
+                            <input type="text" id="newOpContenedor" placeholder="Ej: MSCU1234567" class="w-full px-3 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono">
+                        </div>
+
+                        <!-- Responsable -->
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">Responsable COMEX *</label>
+                            <select id="newOpResponsable" required class="w-full px-3 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+                                <option value="">Cargando...</option>
+                            </select>
+                        </div>
+
+                        <!-- Fecha de Modulación -->
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">Fecha de Modulación (Etapa 1) *</label>
+                            <input type="date" id="newOpFechaModulacion" required class="w-full px-3 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+                        </div>
+
+                        <!-- Naviera (Opcional) -->
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">Naviera (Opcional)</label>
+                            <select id="newOpNaviera" class="w-full px-3 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+                                <option value="">-- Ninguna --</option>
+                            </select>
+                        </div>
+
+                        <!-- Agente de Carga (Opcional) -->
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">Agente de Carga (Opcional)</label>
+                            <select id="newOpAgente" class="w-full px-3 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+                                <option value="">-- Ninguno --</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- CAMPOS ADICIONALES DE CONTROL LOGÍSTICO Y DESPACHO (FIRPLAK) -->
+                    <div class="pt-5 border-t border-slate-100">
+                        <div class="flex items-center gap-2 mb-3">
+                            <i data-lucide="package-check" class="w-4 h-4 text-blue-600"></i>
+                            <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider">Datos Operacionales y de Despacho (Opcionales)</h3>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <!-- Tipo FP -->
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Tipo FP</label>
+                                <select id="newOpTipoFp" class="w-full px-3 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+                                    <option value="">-- Sin definir --</option>
+                                    <option value="CONFIRMADO">CONFIRMADO</option>
+                                    <option value="CANCELADO">CANCELADO</option>
+                                </select>
+                            </div>
+
+                            <!-- Decisión del Mes -->
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Decisión del Mes</label>
+                                <select id="newOpDecisionMes" class="w-full px-3 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+                                    <option value="">-- Sin definir --</option>
+                                    <option value="FACTURAR">FACTURAR</option>
+                                    <option value="NO FACTURAR">NO FACTURAR</option>
+                                </select>
+                            </div>
+
+                            <!-- Ocupación Contenedor -->
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Ocupación Contenedor (%)</label>
+                                <input type="number" step="0.01" min="0" max="150" id="newOpOcupacion" placeholder="Ej: 90 para 90%" class="w-full px-3 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                <span class="text-[10px] text-slate-400">90 se guarda como 0.90</span>
+                            </div>
+
+                            <!-- % Entrega Planta -->
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">% Entrega Planta (%)</label>
+                                <input type="number" step="0.01" min="0" max="100" id="newOpPorcentajeEntrega" placeholder="Ej: 100 para 100%" class="w-full px-3 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                <span class="text-[10px] text-slate-400">100 se guarda como 1.00</span>
+                            </div>
+
+                            <!-- Estado Planta -->
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Estado Planta</label>
+                                <input type="text" id="newOpEstadoPlanta" placeholder="Ej: Completada, En producción" class="w-full px-3 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            </div>
+
+                            <!-- Fecha Programada Despacho -->
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Fecha Programada Despacho</label>
+                                <input type="date" id="newOpFechaProgDespacho" class="w-full px-3 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+                            </div>
+
+                            <!-- N° BL -->
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">N° BL</label>
+                                <input type="text" id="newOpDocumentoTransporte" placeholder="Ej: BL-12345" class="w-full px-3 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono">
+                            </div>
+
+                            <!-- Fecha BL -->
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Fecha BL</label>
+                                <input type="date" id="newOpFechaBl" class="w-full px-3 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+                            </div>
+
+                            <!-- Motonave / Viaje (MN / VY) -->
+                            <div class="sm:col-span-2">
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Motonave / Viaje (MN / VY)</label>
+                                <input type="text" id="newOpMotonaveViaje" placeholder="Ej: MAERSK HAMBURG / 2401" class="w-full px-3 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Botón Enviar -->
+                    <div class="pt-5 border-t border-slate-100 flex items-center justify-end gap-3">
+                        <button type="button" onclick="switchTab('operations')" class="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 font-semibold text-xs sm:text-sm transition">
+                            Cancelar
+                        </button>
+                        <button type="submit" class="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm shadow-md shadow-blue-500/20 transition flex items-center gap-2">
+                            <i data-lucide="check" class="w-4 h-4"></i> Crear Operación
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <!-- ================================================================== -->
+        <!-- PESTAÑA 3: DETALLE DE OPERACIÓN & STEPPER DE 8 ETAPAS -->
+        <!-- ================================================================== -->
+        <section id="tab-detail" class="tab-panel tab-content hidden space-y-6">
+            
+            <!-- Barra superior del detalle -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                <div>
+                    <div class="flex items-center gap-3">
+                        <button onclick="switchTab('operations')" class="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600 transition" title="Regresar a la lista">
+                            <i data-lucide="arrow-left" class="w-4 h-4"></i>
+                        </button>
+                        <h2 id="detFp" class="text-2xl font-black text-slate-900 tracking-tight">FP-XXXX</h2>
+                        <span id="detEstadoBadge" class="px-3 py-0.5 rounded-full text-xs font-bold uppercase border">ACTIVA</span>
+                    </div>
+                    <p class="text-xs text-slate-500 mt-1">
+                        Cliente: <strong id="detCliente" class="text-slate-800">Cargando...</strong> | Destino: <strong id="detPais" class="text-slate-800"></strong>
+                    </p>
+                </div>
+
+                <!-- Controles de Estado y Acción -->
+                <div class="flex items-center gap-2.5 flex-wrap">
+                    <button type="button" onclick="openEditOperationModal()" class="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl font-bold text-xs transition flex items-center gap-1.5 shadow-xs border border-slate-200">
+                        <i data-lucide="edit-3" class="w-3.5 h-3.5 text-blue-600"></i> Editar FP
+                    </button>
+
+                    <div class="flex items-center gap-1.5 text-xs">
+                        <span class="text-slate-500 font-medium">Estado:</span>
+                        <select id="detChangeStatusSelect" onchange="handleStatusChange(this.value)" class="px-2.5 py-1.5 border border-slate-200 rounded-xl font-bold text-slate-800 focus:outline-none bg-slate-50 cursor-pointer">
+                            <option value="activa">Activa</option>
+                            <option value="cerrada">Cerrada</option>
+                            <option value="bloqueada">Bloqueada</option>
+                        </select>
+                    </div>
+
+                    <!-- Botón para avanzar etapa -->
+                    <button id="btnRegistrarSiguienteEtapa" class="hidden px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs sm:text-sm shadow-md shadow-blue-500/20 transition flex items-center gap-2">
+                        <i data-lucide="play" class="w-4 h-4"></i> Registrar Siguiente Etapa
+                    </button>
+                </div>
+            </div>
+
+            <!-- Ficha de Datos Operacionales y de Despacho (Firplak) -->
+            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3.5 text-xs">
+                <!-- Fila 1: Datos Base -->
+                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 pb-3 border-b border-slate-100">
+                    <div>
+                        <span class="text-slate-400 block font-medium">Modalidad & Incoterm</span>
+                        <span id="detModalidad" class="font-bold text-slate-800">-</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block font-medium">Contenedor / Guía</span>
+                        <span id="detContenedor" class="font-bold font-mono text-slate-800">-</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block font-medium">Responsable COMEX</span>
+                        <span id="detResponsable" class="font-bold text-blue-600">-</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block font-medium">Naviera</span>
+                        <span id="detNaviera" class="font-bold text-slate-800">-</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block font-medium">Agente de Carga</span>
+                        <span id="detAgente" class="font-bold text-slate-800">-</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block font-medium">Fecha Modulación</span>
+                        <span id="detFechaModulacion" class="font-bold text-slate-800">-</span>
+                    </div>
+                </div>
+
+                <!-- Fila 2: Datos de Despacho y Facturación (Firplak) -->
+                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                    <div>
+                        <span class="text-slate-400 block font-medium">Estado Facturación</span>
+                        <span id="detEstadoFacturacion" class="inline-block mt-0.5">-</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block font-medium">Tipo FP</span>
+                        <span id="detTipoFp" class="font-bold text-slate-800">-</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block font-medium">Decisión del Mes</span>
+                        <span id="detDecisionMes" class="font-bold text-slate-800">-</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block font-medium">N° BL / Fecha BL</span>
+                        <span id="detBlInfo" class="font-bold text-slate-800 font-mono">-</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block font-medium">MN / VY</span>
+                        <span id="detMotonaveViaje" class="font-bold text-slate-800">-</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block font-medium">Ocupación / Entrega</span>
+                        <span id="detOcupacionEntrega" class="font-bold text-slate-800">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TARJETA COTIZACIÓN MAC (Si aplica) -->
+            <div id="detCotizacionCard" class="hidden p-4 bg-amber-50 border border-amber-200 rounded-2xl text-xs space-y-2">
+                <div class="flex items-center justify-between">
+                    <span class="font-bold text-amber-900 flex items-center gap-1.5">
+                        <i data-lucide="file-text" class="w-4 h-4"></i> Cotización sin FP enviada a MAC
+                    </span>
+                    <span id="detCotMotivo" class="px-2 py-0.5 rounded bg-amber-200 text-amber-900 font-bold uppercase text-[10px]">MUESTRA</span>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-slate-700">
+                    <div><strong>Fecha Envío MAC:</strong> <span id="detCotFechaMac"></span></div>
+                    <div><strong>Observaciones:</strong> <span id="detCotObservaciones"></span></div>
+                    <div><strong>Archivo/Link:</strong> <a id="detCotLink" href="#" target="_blank" class="text-blue-600 underline font-semibold truncate block">Ver Cotización</a></div>
+                </div>
+            </div>
+
+            <!-- LÍNEA DE TIEMPO VISUAL: 8 ETAPAS -->
+            <div class="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h3 class="font-extrabold text-base text-slate-900">Línea de Tiempo Operacional (8 Etapas)</h3>
+                        <p class="text-xs text-slate-500">Secuencia estricta de control. Solo se puede avanzar a la siguiente etapa pendiente.</p>
+                    </div>
+                </div>
+
+                <!-- Stepper Container -->
+                <div id="timelineStepperContainer" class="pt-2">
+                    <!-- Inyectado dinámicamente -->
+                </div>
+            </div>
+
+            <!-- DOS COLUMNAS: HISTORIAL APPEND-ONLY Y PEDIDOS SAP -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                
+                <!-- Columna 1: Auditoría Append-Only de Transiciones -->
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                    <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                        <div class="flex items-center gap-2">
+                            <i data-lucide="history" class="w-4 h-4 text-blue-600"></i>
+                            <h4 class="font-bold text-sm text-slate-900">Historial Inmutable de Etapas (Audit Log)</h4>
+                        </div>
+                        <span class="text-[11px] text-slate-400 font-mono">Append-Only</span>
+                    </div>
+
+                    <div class="overflow-x-auto max-h-72">
+                        <table class="w-full text-left text-xs">
+                            <thead class="bg-slate-50 text-slate-500 uppercase text-[10px] font-bold border-b border-slate-200">
+                                <tr>
+                                    <th class="px-4 py-2">Registrado</th>
+                                    <th class="px-4 py-2">Etapa</th>
+                                    <th class="px-4 py-2">Fecha Hito</th>
+                                    <th class="px-4 py-2">Responsable</th>
+                                    <th class="px-4 py-2">Observaciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="historyTableBody" class="divide-y divide-slate-100">
+                                <!-- Dinámico -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Columna 2: Órdenes de Venta (SAP) y Facturación Parcial -->
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                    <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                        <div>
+                            <h4 class="font-bold text-sm text-slate-900 flex items-center gap-2">
+                                <i data-lucide="layers" class="w-4 h-4 text-indigo-600"></i> Órdenes de Venta (SAP)
+                            </h4>
+                            <p class="text-xs text-slate-500">Gestión de OVs y facturación parcial asociada</p>
+                        </div>
+                        <button onclick="openAddOvModal()" class="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5">
+                            <i data-lucide="plus" class="w-3.5 h-3.5"></i> Agregar OV
+                        </button>
+                    </div>
+
+                    <!-- Listado dinámico de OVs con sus facturas -->
+                    <div id="ovListContainer" class="space-y-3 max-h-80 overflow-y-auto pr-1">
+                        <!-- Dinámico -->
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- ZONA DE PELIGRO: ELIMINAR OPERACIÓN (CAMBIO 7) -->
+            <div class="mt-8 pt-6 border-t border-slate-200">
+                <div class="bg-rose-50/60 border border-rose-200 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                        <h4 class="text-sm font-bold text-rose-900 flex items-center gap-2">
+                            <i data-lucide="alert-triangle" class="w-4 h-4 text-rose-600"></i> Zona de Riesgo: Eliminar Operación
+                        </h4>
+                        <p class="text-xs text-rose-700 mt-0.5">Esta acción es irreversible. Se eliminarán de forma definitiva todos los registros asociados, historial de etapas, OVs y facturas.</p>
+                    </div>
+                    <button type="button" onclick="openDeleteOperationModal()" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-md shadow-rose-600/20 transition flex items-center gap-2 shrink-0">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i> Eliminar Operación
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================================================================== -->
+        <!-- PESTAÑA 4: DASHBOARD ANALÍTICO COMEX -->
+        <!-- ================================================================== -->
+        <section id="tab-dashboard" class="tab-panel tab-content hidden space-y-6">
+            
+            <!-- Barra de Filtros del Dashboard -->
+            <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                    <h2 class="text-lg font-black text-slate-900">Dashboard de Control y Analítica Logística</h2>
+                    <p class="text-xs text-slate-500">Métricas de Lead Time, cuellos de botella y rendimiento de navieras</p>
+                </div>
+
+                <div class="flex items-center gap-3">
+                    <!-- Filtro País -->
+                    <select id="dashFilterCountry" onchange="loadDashboardMetrics()" class="px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-xl focus:outline-none bg-slate-50">
+                        <option value="">Todos los Países</option>
+                    </select>
+
+                    <!-- Filtro Incoterm -->
+                    <select id="dashFilterIncoterm" onchange="loadDashboardMetrics()" class="px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-xl focus:outline-none bg-slate-50">
+                        <option value="">Todos los Incoterms</option>
+                    </select>
+
+                    <button onclick="loadDashboardMetrics()" class="p-2 border border-slate-200 hover:bg-slate-50 rounded-xl text-slate-600 transition" title="Refrescar">
+                        <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- SECCIÓN 1: LEAD TIMES PROMEDIO / MEDIANA / P90 (4 TRAMOS) -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                
+                <!-- Tramo 1: Modulación -> Bodega Cliente -->
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between text-xs text-slate-500 mb-1">
+                            <span class="font-bold text-blue-700">Tramo 1 (Total)</span>
+                            <span id="ltModCount" class="text-[11px] bg-slate-100 px-2 py-0.5 rounded-full font-semibold">0 ops</span>
+                        </div>
+                        <h4 class="text-xs font-bold text-slate-800 leading-snug">Modulación final → Bodega cliente</h4>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-slate-100 grid grid-cols-3 gap-1 text-center">
+                        <div>
+                            <span class="text-[10px] text-slate-400 block uppercase">Promedio</span>
+                            <span id="ltModAvg" class="text-sm font-black text-slate-900">-</span>
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-slate-400 block uppercase">Mediana</span>
+                            <span id="ltModMed" class="text-sm font-black text-blue-600">-</span>
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-slate-400 block uppercase">P90</span>
+                            <span id="ltModP90" class="text-sm font-black text-amber-600">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tramo 2: Despacho a puerto -> Bodega Cliente -->
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between text-xs text-slate-500 mb-1">
+                            <span class="font-bold text-indigo-700">Tramo 2 (Logístico)</span>
+                            <span id="ltDespCount" class="text-[11px] bg-slate-100 px-2 py-0.5 rounded-full font-semibold">0 ops</span>
+                        </div>
+                        <h4 class="text-xs font-bold text-slate-800 leading-snug">Despacho puerto → Bodega cliente</h4>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-slate-100 grid grid-cols-3 gap-1 text-center">
+                        <div>
+                            <span class="text-[10px] text-slate-400 block uppercase">Promedio</span>
+                            <span id="ltDespAvg" class="text-sm font-black text-slate-900">-</span>
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-slate-400 block uppercase">Mediana</span>
+                            <span id="ltDespMed" class="text-sm font-black text-indigo-600">-</span>
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-slate-400 block uppercase">P90</span>
+                            <span id="ltDespP90" class="text-sm font-black text-amber-600">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tramo 3: Embarque -> Llegada puerto -->
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between text-xs text-slate-500 mb-1">
+                            <span class="font-bold text-cyan-700">Tramo 3 (Tránsito)</span>
+                            <span id="ltEmbCount" class="text-[11px] bg-slate-100 px-2 py-0.5 rounded-full font-semibold">0 ops</span>
+                        </div>
+                        <h4 class="text-xs font-bold text-slate-800 leading-snug">Embarque → Llegada puerto destino</h4>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-slate-100 grid grid-cols-3 gap-1 text-center">
+                        <div>
+                            <span class="text-[10px] text-slate-400 block uppercase">Promedio</span>
+                            <span id="ltEmbAvg" class="text-sm font-black text-slate-900">-</span>
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-slate-400 block uppercase">Mediana</span>
+                            <span id="ltEmbMed" class="text-sm font-black text-cyan-600">-</span>
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-slate-400 block uppercase">P90</span>
+                            <span id="ltEmbP90" class="text-sm font-black text-amber-600">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tramo 4: Llegada puerto -> Bodega cliente -->
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between text-xs text-slate-500 mb-1">
+                            <span class="font-bold text-emerald-700">Tramo 4 (Destino)</span>
+                            <span id="ltPtoCount" class="text-[11px] bg-slate-100 px-2 py-0.5 rounded-full font-semibold">0 ops</span>
+                        </div>
+                        <h4 class="text-xs font-bold text-slate-800 leading-snug">Llegada puerto → Bodega cliente</h4>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-slate-100 grid grid-cols-3 gap-1 text-center">
+                        <div>
+                            <span class="text-[10px] text-slate-400 block uppercase">Promedio</span>
+                            <span id="ltPtoAvg" class="text-sm font-black text-slate-900">-</span>
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-slate-400 block uppercase">Mediana</span>
+                            <span id="ltPtoMed" class="text-sm font-black text-emerald-600">-</span>
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-slate-400 block uppercase">P90</span>
+                            <span id="ltPtoP90" class="text-sm font-black text-amber-600">-</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- SECCIÓN 2: RENDIMIENTO NAVIERAS Y GESTIÓN AGENTES -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Navieras -->
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                    <div class="flex items-center justify-between">
+                        <h4 class="font-bold text-sm text-slate-900">Tiempos de Tránsito por Naviera</h4>
+                        <span class="text-[11px] text-slate-500">Embarque → Llegada puerto</span>
+                    </div>
+                    <div class="h-56">
+                        <canvas id="chartNavieras"></canvas>
+                    </div>
+                </div>
+
+                <!-- Agentes de Carga -->
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                    <div class="flex items-center justify-between">
+                        <h4 class="font-bold text-sm text-slate-900">Gestión Portuaria por Agente de Carga</h4>
+                        <span class="text-[11px] text-slate-500">Ingreso a puerto → Embarque</span>
+                    </div>
+                    <div class="h-56">
+                        <canvas id="chartAgentes"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECCIÓN 3: CARGA POR RESPONSABLE & ETAPAS -->
+            <div class="space-y-4">
+                <h3 class="font-black text-base text-slate-900">Carga Operativa y Cuellos de Botella por Responsable</h3>
+                
+                <!-- Tarjetas de Responsables -->
+                <div id="responsiblesCardsContainer" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <!-- Dinámico -->
+                </div>
+
+                <!-- Gráfico de distribución de operaciones por etapa y responsable -->
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                    <h4 class="font-bold text-sm text-slate-900">Operaciones Activas por Etapa y Responsable</h4>
+                    <div class="h-64">
+                        <canvas id="chartStagesByResp"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECCIÓN 4: OPERACIONES ESTANCADAS (PARAMETRIZABLE) -->
+            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-slate-100">
+                    <div>
+                        <h4 class="font-bold text-base text-slate-900 flex items-center gap-2">
+                            <i data-lucide="alert-octagon" class="w-5 h-5 text-rose-600"></i> Detector de Operaciones Estancadas
+                        </h4>
+                        <p class="text-xs text-slate-500">Operaciones activas sin movimiento reciente superior al umbral establecido</p>
+                    </div>
+
+                    <!-- Slider de días parametrizable -->
+                    <div class="flex items-center gap-3 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                        <span class="text-xs font-semibold text-slate-700">Alerta si supera:</span>
+                        <input type="range" id="dashStagnantSlider" min="2" max="20" value="5" oninput="renderStagnantOperationsSection(AppState.operations)" class="w-24 sm:w-32 cursor-pointer">
+                        <span id="dashStagnantDaysDisplay" class="text-xs font-extrabold text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">5 días</span>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-slate-50 text-slate-500 uppercase text-[10px] font-bold border-b border-slate-200">
+                            <tr>
+                                <th class="px-4 py-2.5">FP / Consecutivo</th>
+                                <th class="px-4 py-2.5">Destino</th>
+                                <th class="px-4 py-2.5">Etapa Actual</th>
+                                <th class="px-4 py-2.5">Responsable</th>
+                                <th class="px-4 py-2.5">Tiempo Estancada</th>
+                                <th class="px-4 py-2.5 text-right">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="stagnantOpsTableBody" class="divide-y divide-slate-100">
+                            <!-- Dinámico -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- SECCIÓN 5: REPORTE DE PEDIDOS FACTURADOS SIN DESPACHAR (CAMBIO 6) -->
+            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-slate-100">
+                    <div>
+                        <h4 class="font-bold text-base text-slate-900 flex items-center gap-2">
+                            <i data-lucide="clock" class="w-5 h-5 text-amber-600"></i> Pedidos Facturados Sin Despachar a Puerto
+                        </h4>
+                        <p class="text-xs text-slate-500">Órdenes de venta facturadas que aún no han alcanzado el Despacho a Puerto (Etapa 4). Ordenadas por urgencia.</p>
+                    </div>
+                    <span id="badgeInvoicedUnshippedCount" class="text-xs font-bold px-3 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-full">
+                        0 pendientes
+                    </span>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-slate-50 text-slate-500 uppercase text-[10px] font-bold border-b border-slate-200">
+                            <tr>
+                                <th class="px-4 py-2.5">Operación FP</th>
+                                <th class="px-4 py-2.5">Cliente</th>
+                                <th class="px-4 py-2.5">Orden de Venta (OV)</th>
+                                <th class="px-4 py-2.5">Ingreso SAP</th>
+                                <th class="px-4 py-2.5">Primera Factura</th>
+                                <th class="px-4 py-2.5 text-center">Facturas</th>
+                                <th class="px-4 py-2.5 text-right">Días Facturado Sin Despachar</th>
+                            </tr>
+                        </thead>
+                        <tbody id="invoicedUnshippedTableBody" class="divide-y divide-slate-100">
+                            <!-- Inyectado dinámicamente -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="bg-white border-t border-slate-200 py-4 mt-auto text-xs text-slate-500 text-center">
+        Sistema Interno COMEX &copy; 2026 | Trazabilidad y Control Logístico de Exportaciones
+    </footer>
+
+    <!-- ====================================================================== -->
+    <!-- MODAL: REGISTRAR SIGUIENTE ETAPA -->
+    <!-- ====================================================================== -->
+    <div id="modalRegisterStage" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in duration-200">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <h3 id="modalStageTitle" class="font-bold text-base text-slate-900">Registrar Siguiente Etapa</h3>
+                <button onclick="closeRegisterStageModal()" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <form onsubmit="handleConfirmRegisterStage(event)" class="space-y-4 text-xs sm:text-sm">
+                <input type="hidden" id="modalStageId">
+                <input type="hidden" id="modalStageOrden">
+
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Fecha de Cumplimiento de la Etapa *</label>
+                    <input type="date" id="modalStageDate" required class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white font-medium">
+                </div>
+
+                <div id="modalStageResponsableRow">
+                    <label class="block font-semibold text-slate-700 mb-1">Responsable del Registro *</label>
+                    <select id="modalStageResponsible" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+                        <!-- Opciones de responsables -->
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Observaciones / Novedades (Opcional)</label>
+                    <textarea id="modalStageNotes" rows="3" placeholder="Ej: Carga inspeccionada sin novedad, número de BL confirmado..." class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"></textarea>
+                </div>
+
+                <div class="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                    <button type="button" onclick="closeRegisterStageModal()" class="px-4 py-2 border border-slate-200 rounded-xl text-slate-700 font-semibold hover:bg-slate-50 transition">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-md shadow-blue-500/20 transition">
+                        Confirmar y Avanzar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ====================================================================== -->
+    <!-- MODAL: AGREGAR ORDEN DE VENTA (OV) -->
+    <!-- ====================================================================== -->
+    <div id="modalAddOv" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in duration-200">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <h3 class="font-bold text-base text-slate-900 flex items-center gap-2">
+                    <i data-lucide="layers" class="w-5 h-5 text-indigo-600"></i> Agregar Orden de Venta (OV)
+                </h3>
+                <button onclick="closeAddOvModal()" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <form onsubmit="handleConfirmAddOv(event)" class="space-y-4 text-xs sm:text-sm">
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Número de OV (Orden de Venta SAP) *</label>
+                    <input type="text" id="modalOvNumber" required placeholder="Ej: 2003282 o OV-4500123" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none font-mono font-bold">
+                </div>
+
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Fecha de Ingreso a SAP *</label>
+                    <input type="date" id="modalOvDate" required class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white font-medium">
+                </div>
+
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Observaciones (Opcional)</label>
+                    <textarea id="modalOvNotes" rows="2" placeholder="Detalle de la orden de venta..." class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"></textarea>
+                </div>
+
+                <div class="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                    <button type="button" onclick="closeAddOvModal()" class="px-4 py-2 border border-slate-200 rounded-xl text-slate-700 font-semibold hover:bg-slate-50 transition">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-md shadow-indigo-500/20 transition">
+                        Guardar OV
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ====================================================================== -->
+    <!-- MODAL: AGREGAR FACTURA A OV -->
+    <!-- ====================================================================== -->
+    <div id="modalAddFactura" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in duration-200">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <h3 class="font-bold text-base text-slate-900 flex items-center gap-2">
+                    <i data-lucide="file-text" class="w-5 h-5 text-emerald-600"></i> Registrar Factura en OV
+                </h3>
+                <button onclick="closeAddFacturaModal()" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-xs flex items-center gap-2">
+                <span class="text-slate-500">Asociada a la OV:</span>
+                <span id="modalFacturaOvBadge" class="font-bold font-mono text-indigo-700">-</span>
+            </div>
+
+            <form onsubmit="handleConfirmAddFactura(event)" class="space-y-4 text-xs sm:text-sm">
+                <input type="hidden" id="modalFacturaPedidoSapId">
+
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Número de Factura *</label>
+                    <input type="text" id="modalFacturaNumero" required placeholder="Ej: FAC-98214" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono font-bold">
+                </div>
+
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Fecha de Factura *</label>
+                    <input type="date" id="modalFacturaFecha" required class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white font-medium">
+                </div>
+
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Valor Facturado (USD)</label>
+                    <input type="number" step="0.01" min="0" id="modalFacturaValorUsd" placeholder="0.00" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none font-bold">
+                    <span class="text-[10px] text-slate-400">Total facturado USD según reporte SQL de SAP (opcional)</span>
+                </div>
+
+                <div class="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                    <button type="button" onclick="closeAddFacturaModal()" class="px-4 py-2 border border-slate-200 rounded-xl text-slate-700 font-semibold hover:bg-slate-50 transition">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold shadow-md shadow-emerald-500/20 transition">
+                        Guardar Factura
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ====================================================================== -->
+    <!-- MODAL: EDITAR OPERACIÓN / FP -->
+    <!-- ====================================================================== -->
+    <div id="modalEditOperation" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
+        <div class="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 my-8 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
+                        <i data-lucide="edit" class="w-4 h-4"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-base text-slate-900">Editar Datos de FP <span id="editOpFpBadge" class="font-mono text-blue-600"></span></h3>
+                        <p class="text-xs text-slate-500">Actualiza los datos maestros y de despacho de esta operación</p>
+                    </div>
+                </div>
+                <button onclick="closeEditOperationModal()" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <form onsubmit="handleConfirmEditOperation(event)" class="space-y-4 text-xs sm:text-sm">
+                
+                <!-- Datos Generales -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Cliente *</label>
+                        <select id="editOpCliente" required class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">País Destino *</label>
+                        <input type="text" id="editOpPaisDestino" required class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                    </div>
+
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Incoterm *</label>
+                        <select id="editOpIncoterm" required class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+                            <option value="FOB">FOB</option>
+                            <option value="CIF">CIF</option>
+                            <option value="CFR">CFR</option>
+                            <option value="EXW">EXW</option>
+                            <option value="FCA">FCA</option>
+                            <option value="DAP">DAP</option>
+                            <option value="DDP">DDP</option>
+                            <option value="CIP">CIP</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Modalidad *</label>
+                        <select id="editOpModalidad" required class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+                            <option value="FCL">FCL</option>
+                            <option value="LCL">LCL</option>
+                            <option value="aéreo">Aéreo</option>
+                            <option value="courier">Courier</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Contenedor / Guía</label>
+                        <input type="text" id="editOpContenedor" placeholder="Ej: MSCU1234567" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono">
+                    </div>
+
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Responsable COMEX *</label>
+                        <select id="editOpResponsable" required class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Naviera</label>
+                        <select id="editOpNaviera" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Agente de Carga</label>
+                        <select id="editOpAgente" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Campos de Despacho Firplak -->
+                <div class="pt-3 border-t border-slate-100">
+                    <span class="font-bold text-xs text-slate-800 uppercase tracking-wider block mb-3 flex items-center gap-1">
+                        <i data-lucide="package-check" class="w-3.5 h-3.5 text-blue-600"></i> Control y Despacho (Firplak)
+                    </span>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block font-semibold text-slate-700 mb-1">Tipo FP</label>
+                            <select id="editOpTipoFp" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+                                <option value="">-- Sin definir --</option>
+                                <option value="CONFIRMADO">CONFIRMADO</option>
+                                <option value="CANCELADO">CANCELADO</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block font-semibold text-slate-700 mb-1">Decisión del Mes</label>
+                            <select id="editOpDecisionMes" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+                                <option value="">-- Sin definir --</option>
+                                <option value="FACTURAR">FACTURAR</option>
+                                <option value="NO FACTURAR">NO FACTURAR</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block font-semibold text-slate-700 mb-1">Ocupación Contenedor (%)</label>
+                            <input type="number" step="0.01" min="0" max="150" id="editOpOcupacion" placeholder="Ej: 90 para 90%" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <span class="text-[10px] text-slate-400">90 se almacena como 0.90</span>
+                        </div>
+
+                        <div>
+                            <label class="block font-semibold text-slate-700 mb-1">% Entrega Planta (%)</label>
+                            <input type="number" step="0.01" min="0" max="100" id="editOpPorcentajeEntrega" placeholder="Ej: 100 para 100%" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <span class="text-[10px] text-slate-400">100 se almacena como 1.00</span>
+                        </div>
+
+                        <div>
+                            <label class="block font-semibold text-slate-700 mb-1">Estado Planta</label>
+                            <input type="text" id="editOpEstadoPlanta" placeholder="Ej: Completada, En producción" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        </div>
+
+                        <div>
+                            <label class="block font-semibold text-slate-700 mb-1">Fecha Programada Despacho</label>
+                            <input type="date" id="editOpFechaProgDespacho" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+                        </div>
+
+                        <div>
+                            <label class="block font-semibold text-slate-700 mb-1">N° BL</label>
+                            <input type="text" id="editOpDocumentoTransporte" placeholder="Ej: BL-12345" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono">
+                        </div>
+
+                        <div>
+                            <label class="block font-semibold text-slate-700 mb-1">Fecha BL</label>
+                            <input type="date" id="editOpFechaBl" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+                        </div>
+
+                        <div class="sm:col-span-2">
+                            <label class="block font-semibold text-slate-700 mb-1">Motonave / Viaje (MN / VY)</label>
+                            <input type="text" id="editOpMotonaveViaje" placeholder="Ej: MAERSK HAMBURG / 2401" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                    <button type="button" onclick="closeEditOperationModal()" class="px-4 py-2 border border-slate-200 rounded-xl text-slate-700 font-semibold hover:bg-slate-50 transition text-xs sm:text-sm">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-md shadow-blue-500/20 transition text-xs sm:text-sm flex items-center gap-1.5">
+                        <i data-lucide="check" class="w-4 h-4"></i> Guardar Cambios
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ====================================================================== -->
+    <!-- MODAL: CORREGIR FECHA DE ETAPA (CAMBIO 5 - APPEND ONLY) -->
+    <!-- ====================================================================== -->
+    <div id="modalCorrectStage" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in duration-200">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <h3 id="modalCorrectTitle" class="font-bold text-base text-slate-900 flex items-center gap-2">
+                    <i data-lucide="calendar" class="w-5 h-5 text-amber-600"></i> Corregir Fecha de Etapa
+                </h3>
+                <button onclick="closeCorrectStageModal()" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div class="bg-amber-50 border border-amber-200/80 p-3 rounded-xl text-xs text-amber-900 space-y-1">
+                <div class="font-bold flex items-center gap-1.5">
+                    <i data-lucide="alert-circle" class="w-4 h-4 text-amber-600"></i> Auditoría inmutable (Append-Only)
+                </div>
+                <p class="text-amber-800">Esta acción agregará un nuevo registro de corrección al historial para mantener trazabilidad. La fecha anterior se conserva en el historial de auditoría.</p>
+            </div>
+
+            <form onsubmit="handleConfirmCorrectStage(event)" class="space-y-4 text-xs sm:text-sm">
+                <input type="hidden" id="modalCorrectStageId">
+                <input type="hidden" id="modalCorrectStageOrden">
+
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Nueva Fecha de Cumplimiento *</label>
+                    <input type="date" id="modalCorrectDate" required class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none bg-white font-medium">
+                </div>
+
+                <div id="modalCorrectResponsableRow">
+                    <label class="block font-semibold text-slate-700 mb-1">Responsable del Registro</label>
+                    <select id="modalCorrectResponsible" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none bg-white">
+                        <!-- Responsables -->
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Motivo de la Corrección *</label>
+                    <textarea id="modalCorrectReason" rows="3" required placeholder="Ej: Notificación tardía de puerto, ajuste de digitación..." class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none"></textarea>
+                </div>
+
+                <div class="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                    <button type="button" onclick="closeCorrectStageModal()" class="px-4 py-2 border border-slate-200 rounded-xl text-slate-700 font-semibold hover:bg-slate-50 transition">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold shadow-md shadow-amber-500/20 transition">
+                        Guardar Corrección
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ====================================================================== -->
+    <!-- MODAL: CONFIRMAR ELIMINACIÓN DE OPERACIÓN (CAMBIO 7) -->
+    <!-- ====================================================================== -->
+    <div id="modalDeleteOperation" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in duration-200">
+            <div class="flex items-center gap-3 text-rose-600">
+                <div class="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center shrink-0">
+                    <i data-lucide="alert-octagon" class="w-6 h-6 text-rose-600"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-base text-slate-900">¿Eliminar Operación Definitivamente?</h3>
+                    <p class="text-xs text-slate-500">Acción destructiva e irreversible</p>
+                </div>
+            </div>
+
+            <div class="bg-rose-50 border border-rose-200 p-3.5 rounded-xl text-xs text-rose-900 leading-relaxed">
+                ¿Estás seguro de eliminar la operación FP <strong id="deleteModalFpBadge" class="font-mono font-bold text-rose-950 underline">-</strong>? Esta acción no se puede deshacer y borrará todo su historial, pedidos SAP/OV y facturas asociadas.
+            </div>
+
+            <div class="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                <button type="button" onclick="closeDeleteOperationModal()" class="px-4 py-2 border border-slate-200 rounded-xl text-slate-700 font-semibold hover:bg-slate-50 transition text-xs sm:text-sm">
+                    Cancelar
+                </button>
+                <button type="button" onclick="handleConfirmDeleteOperation()" class="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold shadow-md shadow-rose-600/20 transition text-xs sm:text-sm flex items-center gap-1.5">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i> Sí, Eliminar Definitivamente
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOAST NOTIFICATION CONTAINER -->
+    <div id="globalToast" class="opacity-0 pointer-events-none transition-all"></div>
+
+    <!-- GLOBAL LOADER -->
+    <div id="globalLoader" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-white/60 backdrop-blur-[2px]">
+        <div class="flex items-center gap-3 px-5 py-3 bg-slate-900 text-white rounded-2xl shadow-2xl text-xs font-semibold">
+            <svg class="animate-spin h-4 w-4 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+            </svg>
+            <span>Conectando con Supabase...</span>
+        </div>
+    </div>
+
+    <!-- Script Principal -->
+    <script src="/app.js"></script>
+    <script>
+        // Inicializar iconos
+        if (window.lucide) lucide.createIcons();
+    </script>
+</body>
+</html>

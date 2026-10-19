@@ -1,0 +1,10 @@
+.tmp/
+.env
+token.json
+credentials.json
+__pycache__/
+*.pyc
+execution/output.csv
+*.csv
+schema.sql
+node_modules/

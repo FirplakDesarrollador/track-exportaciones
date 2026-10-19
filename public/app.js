@@ -28,7 +28,9 @@ function hideLogin(email) {
 function emailAllowed(email) {
     return !ALLOWED_EMAILS.length || ALLOWED_EMAILS.includes(String(email || '').toLowerCase());
 }
-// Usa el nombre del responsable a partir del correo (catalina.white@... -> Catalina)
+// Usa el nombre del responsable a partir del correo (catalina.white@... -> Catalina).
+// Con un correo que no corresponde a un responsable (p. ej. el usuario compartido) no cambia nada:
+// queda lo que la persona eligió en este navegador (localStorage) o vacío.
 function syncUserFromEmail(email) {
     const first = String(email || '').split('@')[0].split(/[._-]/)[0];
     if (!first) return;
@@ -42,7 +44,7 @@ let appStarted = false;
 async function startApp(session) {
     const email = session.user && session.user.email;
     if (!emailAllowed(email)) {
-        await supabaseClient.auth.signOut();
+        await supabaseClient.auth.signOut({ scope: 'local' });
         return showLogin(`El usuario ${email} no tiene acceso a esta aplicación.`);
     }
     hideLogin(email);
@@ -85,7 +87,7 @@ async function initAuth() {
         $id('loginPwd').value = '';
         startApp(data.session);
     });
-    $id('btnLogout').addEventListener('click', async () => { await supabaseClient.auth.signOut().catch(() => {}); showLogin(''); });
+    $id('btnLogout').addEventListener('click', async () => { await supabaseClient.auth.signOut({ scope: 'local' }).catch(() => {}); showLogin(''); });
     const { data } = await supabaseClient.auth.getSession();
     if (data && data.session) startApp(data.session); else showLogin('');
 }
@@ -94,7 +96,7 @@ async function initAuth() {
 // 2. ESTADO GLOBAL DE LA APLICACIÓN
 // ----------------------------------------------------------------------------
 const AppState = {
-    currentUser: localStorage.getItem('comex_active_user') || 'Catalina',
+    currentUser: localStorage.getItem('comex_active_user') || '',  // sin valor por defecto: con el usuario compartido cada persona lo elige
     activeTab: 'operations', // 'operations', 'new_operation', 'detail', 'dashboard'
     catalogs: {
         responsables: [],
@@ -148,11 +150,17 @@ document.addEventListener('DOMContentLoaded', () => {
 function initUserSelector() {
     const selector = document.getElementById('globalUserSelector');
     if (selector) {
+        if (![...selector.options].some(o => o.value === '')) {
+            const opt = document.createElement('option'); opt.value = ''; opt.textContent = '— Elige —';
+            selector.insertBefore(opt, selector.firstChild);
+        }
         selector.value = AppState.currentUser;
+        if (selector.value !== AppState.currentUser) { AppState.currentUser = ''; selector.value = ''; }
         selector.addEventListener('change', (e) => {
             AppState.currentUser = e.target.value;
-            localStorage.setItem('comex_active_user', AppState.currentUser);
-            showToast(`Sesión activa: ${AppState.currentUser}`);
+            if (AppState.currentUser) localStorage.setItem('comex_active_user', AppState.currentUser);
+            else localStorage.removeItem('comex_active_user');
+            if (AppState.currentUser) showToast(`Usuario activo: ${AppState.currentUser}`);
             // Actualizar selectores en formularios si están abiertos
             const formResp = document.getElementById('newOpResponsable');
             if (formResp) formResp.value = getResponsibleIdByName(AppState.currentUser) || formResp.value;
@@ -273,7 +281,7 @@ async function loadAllCatalogs() {
 function populateDropdowns() {
     // Dropdowns en formulario Nueva Operación
     populateSelect('newOpCliente', AppState.catalogs.clientes, 'id', 'nombre', '-- Seleccionar Cliente --');
-    populateSelect('newOpResponsable', AppState.catalogs.responsables, 'id', 'nombre');
+    populateSelect('newOpResponsable', AppState.catalogs.responsables, 'id', 'nombre', '-- Seleccionar responsable --');
     populateSelect('newOpNaviera', AppState.catalogs.navieras, 'id', 'nombre', '-- Ninguna / No Aplica --');
     populateSelect('newOpAgente', AppState.catalogs.agentes_carga, 'id', 'nombre', '-- Ninguno / No Aplica --');
 
@@ -1162,7 +1170,7 @@ function openRegisterStageModal(etapaOrden, etapaNombre) {
     } else {
         if (responsableRow) responsableRow.classList.remove('hidden');
         // Asignar responsable default solo cuando el campo está visible
-        populateSelect('modalStageResponsible', AppState.catalogs.responsables, 'id', 'nombre');
+        populateSelect('modalStageResponsible', AppState.catalogs.responsables, 'id', 'nombre', '-- Seleccionar responsable --');
         const defaultRespId = getResponsibleIdByName(AppState.currentUser);
         if (defaultRespId) document.getElementById('modalStageResponsible').value = defaultRespId;
     }
@@ -1191,6 +1199,11 @@ async function handleConfirmRegisterStage(e) {
             ? document.getElementById('modalStageResponsible').value
             : null;
 
+        if (requiereResponsable && !responsableId) {
+            showToast("Elige el responsable de esta etapa.", "warning");
+            showLoading(false);
+            return;
+        }
         if (!etapaId || !fecha) {
             showToast("Por favor completa los campos requeridos.", "warning");
             showLoading(false);
@@ -1424,7 +1437,7 @@ function openCorrectStageModal(etapaOrden, etapaNombre, fechaActual, historialId
         if (respRow) respRow.classList.add('hidden');
     } else {
         if (respRow) respRow.classList.remove('hidden');
-        populateSelect('modalCorrectResponsible', AppState.catalogs.responsables, 'id', 'nombre');
+        populateSelect('modalCorrectResponsible', AppState.catalogs.responsables, 'id', 'nombre', '-- Seleccionar responsable --');
         const defaultRespId = getResponsibleIdByName(AppState.currentUser);
         if (defaultRespId) document.getElementById('modalCorrectResponsible').value = defaultRespId;
     }

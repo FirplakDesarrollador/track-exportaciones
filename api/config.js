@@ -5,7 +5,6 @@
 module.exports = function handler(req, res) {
   const url = (process.env.SUPABASE_URL || '').replace(/\/+$/, '');
   const anon = process.env.SUPABASE_ANON_KEY || '';
-  const allowed = String(process.env.ALLOWED_EMAILS || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -15,5 +14,5 @@ module.exports = function handler(req, res) {
     return res.end(JSON.stringify({ message: 'Faltan SUPABASE_URL o SUPABASE_ANON_KEY en las variables de entorno de Vercel.' }));
   }
   res.statusCode = 200;
-  res.end(JSON.stringify({ supabaseUrl: url, supabaseAnonKey: anon, allowedEmails: allowed }));
+  res.end(JSON.stringify({ supabaseUrl: url, supabaseAnonKey: anon }));
 };

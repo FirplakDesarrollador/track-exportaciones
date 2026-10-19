@@ -5,20 +5,19 @@ Dashboard de seguimiento logístico de exportaciones (FP) de Firplak. Usa la bas
 ## Cómo funciona
 
 - `public/`: la página (index.html, app.js, styles.css, `tailwind.css` ya compilado y `vendor/` con Lucide, Chart.js y supabase-js). No depende de ningún CDN.
-- `api/config.js`: función de Vercel que entrega al navegador solo la URL de Supabase y la llave **anon** (pública por diseño) y la lista opcional de correos autorizados.
+- `api/config.js`: función de Vercel que entrega al navegador solo la URL de Supabase y la llave **anon** (pública por diseño).
 - La página inicia sesión con **Supabase Auth** (correo y contraseña) y todas las consultas se hacen como ese usuario, así que aplican los permisos por filas (RLS) de la base: leer, crear y editar. **No hay ninguna llave secreta en el código** (la antigua `service_role` se quitó).
 - **Borrar operaciones está deshabilitado**: RLS no permite DELETE a los usuarios. Para anular una FP, cámbiale el estado.
 - `server.py`: modo local. Sirve `public/` y responde `/api/config` con los datos del `.env`.
 
 ## Publicarlo en Vercel
 
-1. **Crear los usuarios en Supabase:** Authentication → Users → Add user → Create new user, con **Auto Confirm User** marcado: catalina.white@firplak.com, laura.buitrago@firplak.com, john.salazar@firplak.com (si ya los creaste para Importaciones, son los mismos).
-2. **Apagar los registros públicos:** Authentication → Sign In / Providers → desactiva **Allow new users to sign up**. Esto es lo que de verdad impide que alguien más se cree una cuenta; `ALLOWED_EMAILS` solo es un filtro adicional en la página.
+1. **Crear los usuarios en Supabase** (pueden compartir uno, p. ej. el usuario del equipo): Authentication → Users → Add user → Create new user, con **Auto Confirm User** marcado: catalina.white@firplak.com, laura.buitrago@firplak.com, john.salazar@firplak.com (si ya los creaste para Importaciones, son los mismos).
+2. **Apagar los registros públicos:** Authentication → Sign In / Providers → desactiva **Allow new users to sign up**. Así solo entran los usuarios que crees tú: cualquier usuario válido de Supabase Auth puede entrar (no hay lista de correos).
 3. En Vercel: **Add New → Project**, importa `FirplakDesarrollador/track-exportaciones`. **Framework Preset: Other**. Build Command, Output Directory e Install Command vacíos (se toman de `vercel.json`).
 4. **Settings → Environment Variables** (Production y Preview):
    - `SUPABASE_URL` = `https://ahcrtxmlotzagtwwyvny.supabase.co`
    - `SUPABASE_ANON_KEY` = la llave anon / publishable (Supabase → Project Settings → API Keys)
-   - `ALLOWED_EMAILS` = `catalina.white@firplak.com,laura.buitrago@firplak.com,john.salazar@firplak.com`
    - **No** pongas la llave `service_role`: esta app no la necesita.
 5. **Deployments → Redeploy**. Al abrir el enlace pide correo y contraseña; arriba aparecen el correo y **Cerrar sesión**. El selector "Usuario" se ajusta solo según el correo.
 

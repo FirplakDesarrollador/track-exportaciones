@@ -54,8 +54,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             anon = CFG.get("SUPABASE_ANON_KEY", "")
             if not url or not anon:
                 return self._json(503, {"message": "Falta SUPABASE_URL o SUPABASE_ANON_KEY en el archivo .env"})
-            allowed = [e.strip().lower() for e in CFG.get("ALLOWED_EMAILS", "").split(",") if e.strip()]
-            return self._json(200, {"supabaseUrl": url, "supabaseAnonKey": anon, "allowedEmails": allowed})
+            return self._json(200, {"supabaseUrl": url, "supabaseAnonKey": anon})
         if self.path.startswith("/api/"):
             return self._json(404, {"message": "No encontrado"})
         return super().do_GET()

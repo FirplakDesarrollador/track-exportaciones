@@ -10,7 +10,6 @@
 // Todas las consultas se hacen como el usuario que inició sesión, así que aplican los permisos (RLS) de Supabase.
 // En este código NO hay ninguna llave secreta.
 let supabaseClient = null;
-let ALLOWED_EMAILS = [];
 
 const $id = (x) => document.getElementById(x);
 function showLogin(msg) {
@@ -24,9 +23,6 @@ function hideLogin(email) {
     $id('loginOverlay').classList.add('hidden');
     $id('loginMsg').textContent = ''; $id('loginMsg').classList.add('hidden');
     if (email) { $id('userEmail').textContent = email; $id('userBox').classList.remove('hidden'); $id('userBox').classList.add('flex'); }
-}
-function emailAllowed(email) {
-    return !ALLOWED_EMAILS.length || ALLOWED_EMAILS.includes(String(email || '').toLowerCase());
 }
 // Usa el nombre del responsable a partir del correo (catalina.white@... -> Catalina).
 // Con un correo que no corresponde a un responsable (p. ej. el usuario compartido) no cambia nada:
@@ -43,10 +39,6 @@ function syncUserFromEmail(email) {
 let appStarted = false;
 async function startApp(session) {
     const email = session.user && session.user.email;
-    if (!emailAllowed(email)) {
-        await supabaseClient.auth.signOut({ scope: 'local' });
-        return showLogin(`El usuario ${email} no tiene acceso a esta aplicación.`);
-    }
     hideLogin(email);
     syncUserFromEmail(email);
     if (appStarted) { await checkDatabaseAndLoad(); return; }
@@ -66,7 +58,6 @@ async function initAuth() {
     } catch (e) {
         return showLogin('No pude leer la configuración del servidor: ' + e.message);
     }
-    ALLOWED_EMAILS = (cfg.allowedEmails || []).map(x => String(x).toLowerCase());
     supabaseClient = supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, {
         auth: { persistSession: true, autoRefreshToken: true, storageKey: 'comex-export-auth' },
     });

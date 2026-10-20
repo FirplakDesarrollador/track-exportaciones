@@ -344,7 +344,7 @@ async function loadOperations() {
             .select(`
                 *,
                 cliente:clientes(id, nombre, pais_predeterminado),
-                responsable:responsables(id, nombre),
+                responsable:responsables!responsable_id(id, nombre),
                 naviera:navieras(id, nombre),
                 agente:agentes_carga(id, nombre),
                 pedidos:pedidos_sap(id, numero_ov, valor, facturas(id, numero_factura, valor_usd, fecha_factura))
@@ -788,7 +788,7 @@ async function loadOperationDetail(operationId) {
             .select(`
                 *,
                 cliente:clientes(*),
-                responsable:responsables(*),
+                responsable:responsables!responsable_id(*),
                 naviera:navieras(*),
                 agente:agentes_carga(*),
                 pedidos:pedidos_sap(*, facturas(*)),

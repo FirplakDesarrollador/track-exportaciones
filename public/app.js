@@ -352,7 +352,8 @@ async function loadOperations() {
             .order('created_at', { ascending: false });
 
         if (error) throw error;
-        AppState.operations = data || [];
+        const fpNum = o => parseInt(String(o.fp || '').replace(/\D/g, ''), 10) || 0;
+        AppState.operations = (data || []).sort((a, b) => fpNum(b) - fpNum(a) || new Date(b.created_at) - new Date(a.created_at));
         renderOperationsTable();
         updateGlobalCounters();
     } catch (e) {
